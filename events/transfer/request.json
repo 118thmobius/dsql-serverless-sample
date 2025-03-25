@@ -1,0 +1,6 @@
+{
+  "from_account_id": "11111111-aaaa-1111-aaaa-111111111111",
+  "to_account_id": "22222222-bbbb-2222-bbbb-222222222222",
+  "amount": 500,
+  "description": "家賃支払い"
+}

@@ -1,0 +1,136 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  dsql-serverless-sample
+
+  Sample SAM Template for dsql-serverless-sample
+
+Parameters:
+  DSQLEndpoint:
+    Type: String
+    Description: "Endpoint of DSQL"
+  DSQLRegion:
+    Type: String
+    Description: "Endpoint region of DSQL"
+    Default: "us-east-1"
+
+Globals:
+  Function:
+    Timeout: 5
+    MemorySize: 128
+    Tracing: Active
+    LoggingConfig:
+      LogFormat: JSON
+  Api:
+    TracingEnabled: true
+Resources:
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AWSXRayWriteOnlyAccess
+      Policies:
+        - PolicyName: DsqlInlinePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'dsql:*'
+                Resource: '*'
+
+  VersionFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      CodeUri: cmd/version/
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - x86_64
+      Events:
+        CatchAll:
+          Type: Api
+          Properties:
+            Path: /version
+            Method: GET
+  StateFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      Role: !GetAtt LambdaExecutionRole.Arn
+      CodeUri: cmd/state/
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+        - x86_64
+      Events:
+        CatchAll:
+          Type: Api
+          Properties:
+            Path: /state/{userId}
+            Method: GET
+      Environment:
+        Variables:
+          DSQL_REGION: !Ref DSQLRegion
+          DSQL_CLUSTER_ENDPOINT: !Ref DSQLEndpoint
+  TransferFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      BuildMethod: go1.x
+    Properties:
+      Role: !GetAtt LambdaExecutionRole.Arn
+      CodeUri: cmd/transfer/
+      Handler: bootstrap
+      Runtime: provided.al2023
+      Architectures:
+      - x86_64
+      Events:
+        ThisApi:
+          Type: Api
+          Properties:
+            Path: /transfer
+            Method: POST
+      Environment:
+        Variables:
+          DSQL_REGION: !Ref DSQLRegion
+          DSQL_CLUSTER_ENDPOINT: !Ref DSQLEndpoint
+
+  ApplicationResourceGroup:
+    Type: AWS::ResourceGroups::Group
+    Properties:
+      Name:
+        Fn::Sub: ApplicationInsights-SAM-${AWS::StackName}
+      ResourceQuery:
+        Type: CLOUDFORMATION_STACK_1_0
+  ApplicationInsightsMonitoring:
+    Type: AWS::ApplicationInsights::Application
+    Properties:
+      ResourceGroupName:
+        Ref: ApplicationResourceGroup
+      AutoConfigurationEnabled: 'true'
+Outputs:
+  ShowAPI:
+    Description: API Gateway endpoint URL for Prod environment for Show Function
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/show/"
+  TransferAPI:
+    Description: API Gateway endpoint URL for Prod environment for First Function
+    Value: !Sub "https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod/transfer/"
+  TransferFunction:
+    Description: First Lambda Function ARN
+    Value: !GetAtt TransferFunction.Arn
+  LambdaExecutionRole:
+    Description: IAM Role created for Hello World function
+    Value: !GetAtt LambdaExecutionRole.Arn

@@ -1,0 +1,208 @@
+openapi: 3.1.0
+info:
+  title: Title
+  description: Title
+  version: 0.0.1
+servers:
+  - url: 'https'
+components:
+  schemas:
+    Account:
+      type: object
+      properties:
+        user_id:
+          type: string
+          description: ユーザID
+          example: "12345678-90ab-cdef-1234-567890abcdef"
+        screen_name:
+          type: string
+          description: スクリーンネーム
+          example: "alice"
+    StatefulAccount:
+      allOf:
+        - $ref: '#/components/schemas/Account'
+        - type: object
+          properties:
+            deposit:
+              type: integer
+              description: 口座残高
+              example: 10000
+
+    Transaction:
+      type: object
+      properties:
+        tx_id:
+          type: string
+          description: トランザクションID
+          example: "12345678-90ab-cdef-1234-567890abcdef"
+        from:
+          $ref: '#/components/schemas/Account'
+        to:
+          $ref: '#/components/schemas/Account'
+        amount:
+          type: integer
+          description: 送金額
+          example: "500"
+
+    TransferRequest:
+      type: object
+      required:
+        - from_account_id
+        - to_account_id
+        - amount
+      properties:
+        from_account_id:
+          type: string
+          description: 送金元口座番号
+          example: "1234567890"
+        to_account_id:
+          type: string
+          description: 送金先口座番号
+          example: "0987654321"
+        amount:
+          type: number
+          format: integer
+          description: 送金額
+          example: 5000
+        description: # 任意
+          type: string
+          description: 送金の説明/メモ
+          example: "家賃支払い"
+
+    TransferResponse:
+      type: object
+      properties:
+        transaction:
+          $ref: '#/components/schemas/Transaction'
+        message:
+          type: string
+          description: メッセージ (成功時/失敗時)
+          example: "Transfer complete"
+
+
+    HistoryResponse:
+      type: object
+      properties:
+        history:
+          type: array
+          description: 取引履歴
+          items:
+            transaction_id:
+              type: string
+              description: 取引ID
+              example: "TXN-123456789"
+            message:
+              type: string
+              description: メッセージ (成功時/失敗時)
+              example: "Transfer complete"
+
+    ErrorBase:  # 共通のベーススキーマ
+      type: object
+      properties:
+        code:
+          type: integer
+          format: int32
+          description: エラーコード
+          example: 400
+        message:
+          type: string
+          description: エラーメッセージ
+          example: "Error occurred"
+
+    BadRequestError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorBase'
+        - type: object
+          properties:
+            code:
+              example: 400
+            message:
+              example: "入力値が不正です"
+            errors:
+              type: array
+              description: "エラーが発生しているフィールドとその内容の説明"
+              items:
+                type: object
+                description: "エラー原因のフィールドとその説明"
+                properties:
+                  field:
+                    type: string
+                    example: "amount"
+                  message:
+                    type: string
+                    example: "金額は正の数である必要があります"
+
+    InsufficientFundsError:
+      allOf:
+        - $ref: '#/components/schemas/ErrorBase'
+        - type: object
+          properties:
+            code:
+              example: 400
+            message:
+              example: "Insufficient balance"
+
+    InternalServerError: # サーバーエラー用
+      allOf:
+        - $ref: '#/components/schemas/ErrorBase'
+        - type: object
+          properties:
+            code:
+              example: 500
+            message:
+              example: "サーバー内部エラーが発生しました"
+
+
+    ErrorResponse: # レスポンスで使うスキーマ (oneOfを使用)
+      oneOf:
+        - $ref: '#/components/schemas/BadRequestError'
+        - $ref: '#/components/schemas/InsufficientFundsError'
+
+paths:
+  /account:
+    get:
+      summary: 口座情報取得
+      description: 口座の残高等を取得します。
+      parameters:
+        - in: query
+          name: userId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200' :
+          description: 取得成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatefulAccount'
+  /transfers:
+    post:
+      summary: 口座間送金
+      description: 指定された口座間で送金を行います。
+      operationId: transferFunds
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+      responses:
+        '200' :
+          description: 送金成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '400':
+          description: 不正なリクエスト
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: サーバー内部エラー
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InternalServerError'
